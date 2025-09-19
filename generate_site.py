@@ -1,0 +1,417 @@
+# generate_site.py
+"""
+Generate a prettier site where all fetched memes sit on one horizontal line.
+Click / tap a meme to open an accessible lightbox that enlarges the image.
+"""
+
+import os
+import json
+import datetime
+import html as htmllib
+
+MEME_PATH = "memes"
+OUTPUT_PATH = "site"
+
+
+def load_today_memes():
+    today = datetime.date.today().isoformat()
+    path = os.path.join(MEME_PATH, f"{today}.json")
+    if not os.path.exists(path):
+        return []
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def generate_html(meme_list):
+    # safe JSON copy for JS usage (unescaped JSON)
+    memes_json = json.dumps(meme_list, ensure_ascii=False)
+
+    # build the cards; use html escaping for visible text
+    cards = []
+    for idx, m in enumerate(meme_list):
+        title = htmllib.escape(m.get("title") or "Untitled")
+        subreddit = htmllib.escape(m.get("subreddit") or "")
+        post_link = htmllib.escape(m.get("postLink") or "#")
+        img_url = htmllib.escape(m.get("url") or "")
+        cards.append(
+            f'''
+            <button class="card" data-index="{idx}" aria-label="Open meme: {title}">
+                <img src="{img_url}" alt="{title}" loading="lazy">
+                <div class="card-content">
+                    <div class="meme-title">
+                        <a href="{post_link}" target="_blank" rel="noopener noreferrer">{title}</a>
+                    </div>
+                    <div class="meme-meta">r/{subreddit}</div>
+                </div>
+            </button>
+            '''
+        )
+
+    cards_html = "\n".join(cards)
+
+    today_str = datetime.date.today().strftime("%B %d, %Y")
+
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Daily Memes — {today_str}</title>
+
+<!-- tiny emoji favicon so browsers don't 404 for favicon.ico -->
+<link rel="icon" href="data:,😄">
+
+<style>
+  :root {{
+    --accent: #6a0dad;
+    --bg-start: #f8f9fc;
+    --bg-end: #eceffd;
+    --card-bg: #fff;
+    --muted: #6b7280;
+  }}
+
+  html,body {{
+    height: 100%;
+    margin: 0;
+    font-family: "Segoe UI", Roboto, system-ui, -apple-system, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    background: linear-gradient(135deg, var(--bg-start), var(--bg-end));
+    color: #111827;
+  }}
+
+  header {{
+    background: var(--accent);
+    color: white;
+    padding: 18px 12px;
+    text-align: center;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+  }}
+  header h1 {{ margin: 0; font-size: 1.5rem; letter-spacing: 0.2px; }}
+
+  .container {{
+    max-width: 1200px;
+    margin: 26px auto;
+    padding: 0 16px;
+  }}
+
+  /* ROW: single horizontal line of cards, no wrap */
+  .row {{
+    display: flex;
+    gap: 18px;
+    align-items: start;
+    flex-wrap: nowrap;               /* enforce single-line */
+    overflow-x: auto;                /* allow horizontal scroll on small screens */
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 8px;
+  }}
+
+  /* Ensure 5 cards share the width on large screens, but allow horizontal scroll if viewport is narrow */
+  .card {{
+    flex: 0 0 calc((100% - 72px) / 5); /* 5 cards across (72px = 4*gap) when space allows */
+    min-width: 160px;                  /* if viewport is narrow, cards keep this width and row scrolls */
+    background: var(--card-bg);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+    border: 1px solid rgba(15,23,42,0.04);
+    display: inline-flex;
+    flex-direction: column;
+    align-items: stretch;
+    text-align: left;
+    padding: 0;
+    transition: transform .18s ease, box-shadow .18s ease;
+    cursor: pointer;
+  }}
+  .card:focus,
+  .card:hover {{
+    transform: translateY(-6px);
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.14);
+    outline: none;
+  }}
+
+  .card img {{
+    display: block;
+    width: 100%;
+    height: auto;
+    object-fit: cover;
+    border-bottom: 1px solid #f3f4f6;
+  }}
+
+  .card-content {{
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }}
+  .meme-title {{
+    font-weight: 600;
+    font-size: 0.98rem;
+    color: #0f1720;
+    line-height: 1.2;
+    max-height: 2.4rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }}
+  .meme-meta {{
+    color: var(--muted);
+    font-size: 0.86rem;
+  }}
+
+  /* Lightbox (overlay) */
+  .lightbox {{
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    background: rgba(3,7,18,0.6);
+    padding: 24px;
+  }}
+  .lightbox.show {{ display: flex; }}
+
+  .lightbox-card {{
+    position: relative;
+    max-width: 1100px;
+    width: 100%;
+    max-height: calc(100vh - 120px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+  }}
+
+  .lightbox-img {{
+    max-width: calc(100vw - 120px);
+    max-height: calc(100vh - 160px);
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 12px 40px rgba(2,6,23,0.6);
+    transition: transform .12s ease;
+  }}
+
+  .caption-bar {{
+    margin-top: 12px;
+    color: white;
+    text-align: center;
+    font-size: 0.95rem;
+  }}
+
+  /* Controls */
+  .btn {{
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    background: rgba(255,255,255,0.06);
+    border: none;
+    color: white;
+    font-size: 20px;
+    width: 44px;
+    height: 44px;
+    border-radius: 8px;
+    display: inline-grid;
+    place-items: center;
+    cursor: pointer;
+    backdrop-filter: blur(4px);
+  }}
+  .btn:focus {{ outline: 2px solid #fff3; }}
+
+  .nav-left, .nav-right {{
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(255,255,255,0.06);
+    border: none;
+    color: white;
+    font-size: 32px;
+    width: 56px;
+    height: 68px;
+    border-radius: 8px;
+    display: inline-grid;
+    place-items: center;
+    cursor: pointer;
+  }}
+  .nav-left {{ left: 12px; }}
+  .nav-right {{ right: 12px; }}
+
+  /* small screens adjustments: make nav smaller */
+  @media (max-width: 520px) {{
+    .nav-left, .nav-right {{ width: 44px; height: 56px; font-size: 26px; }}
+    .card {{ min-width: 140px; }}
+  }}
+
+  footer {{
+    text-align: center;
+    color: var(--muted);
+    padding: 22px 12px;
+    font-size: 0.92rem;
+  }}
+
+  /* hide default scrollbar on webkit while preserving scroll */
+  .row::-webkit-scrollbar {{ height: 10px; }}
+  .row::-webkit-scrollbar-thumb {{ background: rgba(15,23,42,0.12); border-radius: 8px; }}
+</style>
+</head>
+<body>
+  <header>
+    <h1>✨ Daily Memes — {today_str} ✨</h1>
+  </header>
+
+  <main class="container">
+    <section aria-label="Today’s memes">
+      <div class="row" id="meme-row">
+        {cards_html}
+      </div>
+    </section>
+  </main>
+
+  <div id="lightbox" class="lightbox" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="lightbox-card" role="document">
+      <button id="close-btn" class="btn" title="Close (Esc)">&times;</button>
+      <button id="prev-btn" class="nav-left" aria-label="Previous meme">‹</button>
+      <img id="lightbox-img" class="lightbox-img" alt="Enlarged meme">
+      <button id="next-btn" class="nav-right" aria-label="Next meme">›</button>
+    </div>
+    <div class="caption-bar" id="lightbox-caption" aria-live="polite"></div>
+  </div>
+
+<script>
+  // Data for JS (safe JSON)
+  const MEMES = {memes_json};
+
+  (function () {{
+    const row = document.getElementById("meme-row");
+    const lightbox = document.getElementById("lightbox");
+    const imgEl = document.getElementById("lightbox-img");
+    const captionEl = document.getElementById("lightbox-caption");
+    const closeBtn = document.getElementById("close-btn");
+    const prevBtn = document.getElementById("prev-btn");
+    const nextBtn = document.getElementById("next-btn");
+
+    let currentIndex = 0;
+    let touchStartX = null;
+
+    // attach click handlers to cards
+    row.querySelectorAll(".card").forEach(btn => {{
+      btn.addEventListener("click", () => {{
+        const idx = Number(btn.dataset.index);
+        openLightbox(idx);
+      }});
+      // keyboard: Enter/Space should open
+      btn.addEventListener("keydown", (ev) => {{
+        if (ev.key === "Enter" || ev.key === " ") {{
+          ev.preventDefault();
+          const idx = Number(btn.dataset.index);
+          openLightbox(idx);
+        }}
+      }});
+    }});
+
+    function openLightbox(index) {{
+      currentIndex = index;
+      updateLightbox();
+      lightbox.classList.add("show");
+      lightbox.setAttribute("aria-hidden", "false");
+      // prevent page scroll
+      document.body.style.overflow = "hidden";
+      // move focus to close button for accessibility
+      closeBtn.focus();
+    }}
+
+    function closeLightbox() {{
+      lightbox.classList.remove("show");
+      lightbox.setAttribute("aria-hidden", "true");
+      document.body.style.overflow = "";
+    }}
+
+    function updateLightbox() {{
+      const data = MEMES[currentIndex];
+      if (!data) return;
+      imgEl.src = data.url;
+      imgEl.alt = data.title || "Meme";
+      captionEl.textContent = (data.title || "Untitled") + " — " + (data.subreddit ? ("r/" + data.subreddit) : "");
+      // preload next image for smoother nav
+      const nextIdx = (currentIndex + 1) % MEMES.length;
+      const p = new Image();
+      if (MEMES[nextIdx] && MEMES[nextIdx].url) p.src = MEMES[nextIdx].url;
+    }}
+
+    closeBtn.addEventListener("click", closeLightbox);
+    prevBtn.addEventListener("click", () => {{
+      currentIndex = (currentIndex - 1 + MEMES.length) % MEMES.length;
+      updateLightbox();
+    }});
+    nextBtn.addEventListener("click", () => {{
+      currentIndex = (currentIndex + 1) % MEMES.length;
+      updateLightbox();
+    }});
+
+    // click outside the image closes
+    lightbox.addEventListener("click", (ev) => {{
+      if (ev.target === lightbox) closeLightbox();
+    }});
+
+    // keyboard navigation
+    document.addEventListener("keydown", (ev) => {{
+      if (lightbox.classList.contains("show")) {{
+        if (ev.key === "Escape") closeLightbox();
+        else if (ev.key === "ArrowLeft") {{
+          currentIndex = (currentIndex - 1 + MEMES.length) % MEMES.length;
+          updateLightbox();
+        }} else if (ev.key === "ArrowRight") {{
+          currentIndex = (currentIndex + 1) % MEMES.length;
+          updateLightbox();
+        }}
+      }}
+    }});
+
+    // touch swipe support on lightbox image
+    imgEl.addEventListener("touchstart", (ev) => {{
+      touchStartX = ev.touches && ev.touches[0] && ev.touches[0].clientX;
+    }}, {{ passive: true }});
+
+    imgEl.addEventListener("touchend", (ev) => {{
+      if (touchStartX === null) return;
+      const touchEndX = (ev.changedTouches && ev.changedTouches[0] && ev.changedTouches[0].clientX) || 0;
+      const dx = touchEndX - touchStartX;
+      if (Math.abs(dx) > 40) {{
+        if (dx < 0) {{
+          // swipe left => next
+          currentIndex = (currentIndex + 1) % MEMES.length;
+          updateLightbox();
+        }} else {{
+          // swipe right => prev
+          currentIndex = (currentIndex - 1 + MEMES.length) % MEMES.length;
+          updateLightbox();
+        }}
+      }}
+      touchStartX = null;
+    }}, false);
+
+  }})();
+</script>
+
+<footer>
+  Made with Love. Tap a meme to enlarge. Updated daily. <https://www.youtube.com/watch?v=xvFZjo5PgG0>
+</footer>
+</body>
+</html>"""
+
+
+def save_site(html_content):
+    os.makedirs(OUTPUT_PATH, exist_ok=True)
+    with open(os.path.join(OUTPUT_PATH, "index.html"), "w", encoding="utf-8") as f:
+        f.write(html_content)
+
+
+if __name__ == "__main__":
+    todays_memes = load_today_memes()
+    if todays_memes:
+        page_html = generate_html(todays_memes)
+        save_site(page_html)
+        print("Site generated with today's memes.")
+    else:
+        print("No memes to display.")

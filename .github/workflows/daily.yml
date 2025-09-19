@@ -1,0 +1,53 @@
+name: Daily Meme Publish
+
+on:
+  schedule:
+    - cron: "0 6 * * *"   # runs daily at 06:00 UTC
+  workflow_dispatch:      # allows manual triggering
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Needed for git history
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Fetch memes
+        run: python fetch_meme.py
+
+      - name: Generate site
+        run: python generate_site.py
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "daily-meme-bot"
+          git config --global user.email "meme-bot@example.com"
+
+      - name: Deploy to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: site
+          branch: gh-pages
+          token: ${{ secrets.GITHUB_TOKEN }}
+          clean: true
+
+      # Optional: Archive the memes as artifacts
+      - name: Archive meme data
+        uses: actions/upload-artifact@v3
+        with:
+          name: memes-data
+          path: memes/*.json
+          retention-days: 7
