@@ -1,11 +1,10 @@
 {
   "name": "meme-web",
   "version": "1.0.0",
-  "description": "Placeholder for CI compatibility.",
-  "main": "index.js",
+  "description": "Daily meme website with automated updates",
   "scripts": {
-    "build": "mkdir -p dist && cp -r src/* dist/ || echo 'No src directory, creating minimal index.html' && [ -d dist ] || mkdir dist && [ -f dist/index.html ] || echo '<html><head><title>Meme Web</title></head><body><h1>Meme Web</h1></body></html>' > dist/index.html"
+    "build": "python fetch_meme.py && python generate_site.py && mkdir -p dist && cp -r site/* dist/"
   },
-  "author": "",
+  "author": "Codex-Crusader",
   "license": "MIT"
 }
