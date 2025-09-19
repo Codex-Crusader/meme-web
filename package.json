@@ -4,10 +4,8 @@
   "description": "Placeholder for CI compatibility.",
   "main": "index.js",
   "scripts": {
-    "build": "echo 'Building project' && mkdir -p dist && cp -r src/* dist/ || echo 'No src directory found, creating empty dist' && mkdir -p dist && touch dist/index.html"
+    "build": "mkdir -p dist && cp -r src/* dist/ || echo 'No src directory, creating minimal index.html' && [ -d dist ] || mkdir dist && [ -f dist/index.html ] || echo '<html><head><title>Meme Web</title></head><body><h1>Meme Web</h1></body></html>' > dist/index.html"
   },
   "author": "",
-  "license": "MIT",
-  "dependencies": {
-  }
+  "license": "MIT"
 }
