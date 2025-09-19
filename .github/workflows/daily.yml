@@ -30,6 +30,6 @@ jobs:
         uses: JamesIves/github-pages-deploy-action@v4
         with:
           branch: gh-pages  # The branch to deploy to
-          folder: dist      # The folder to deploy (adjust if yours is different)
+          folder: site  # Change from "dist" to "site"
           clean: true       # Automatically remove deleted files
           token: ${{ secrets.GITHUB_TOKEN }}  # Using the built-in token
