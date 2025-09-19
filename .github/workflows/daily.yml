@@ -46,7 +46,7 @@ jobs:
 
       # Optional: Archive the memes as artifacts
       - name: Archive meme data
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: memes-data
           path: memes/*.json
