@@ -2,52 +2,34 @@ name: Daily Meme Publish
 
 on:
   schedule:
-    - cron: "0 6 * * *"   # runs daily at 06:00 UTC
-  workflow_dispatch:      # allows manual triggering
+    - cron: '0 12 * * *'  # Runs at 12:00 UTC every day
+  workflow_dispatch:  # Allows manual triggering
+
+permissions:
+  contents: write  # This is crucial for allowing push to the repository
 
 jobs:
-  build-and-publish:
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v3
+        
+      - name: Install Node.js
+        uses: actions/setup-node@v3
         with:
-          fetch-depth: 0  # Needed for git history
-
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.11"
-          cache: 'pip'
-
+          node-version: '18'
+          
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Fetch memes
-        run: python fetch_meme.py
-
-      - name: Generate site
-        run: python generate_site.py
-
-      - name: Configure Git
-        run: |
-          git config --global user.name "daily-meme-bot"
-          git config --global user.email "meme-bot@example.com"
-
-      - name: Deploy to GitHub Pages
+        run: npm ci
+        
+      - name: Build
+        run: npm run build
+        
+      - name: Deploy
         uses: JamesIves/github-pages-deploy-action@v4
         with:
-          folder: site
-          branch: gh-pages
-          token: ${{ secrets.GITHUB_TOKEN }}
-          clean: true
-
-      # Optional: Archive the memes as artifacts
-      - name: Archive meme data
-        uses: actions/upload-artifact@v4
-        with:
-          name: memes-data
-          path: memes/*.json
-          retention-days: 7
+          branch: gh-pages  # The branch to deploy to
+          folder: dist      # The folder to deploy (adjust if yours is different)
+          clean: true       # Automatically remove deleted files
+          token: ${{ secrets.GITHUB_TOKEN }}  # Using the built-in token
