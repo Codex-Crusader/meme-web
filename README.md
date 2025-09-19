@@ -290,3 +290,8 @@ This project is open source and available under the MIT License.
 Made with love, Fork me on GitHub
 Thank you for reading.
 
+git init
+git remote add origin https://github.com/Codex-Crusader/meme-web.git
+git add .
+git commit -m "Initial commit"
+git push -u origin main
